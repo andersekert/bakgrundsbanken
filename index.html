@@ -344,9 +344,7 @@ async function renderWeather(box, p, u){
     el("span", {}, ["Vind ", el("b", {text:n1(best.wind) + " m/s"}), typeof best.gust === "number" ? " (byar " + n1(best.gust) + ")" : "", typeof best.wdir === "number" ? " från " + compass16(best.wdir) : ""]),
     el("span", {}, ["Moln ", el("b", {text:best.cloud !== null ? best.cloud + " %" : "–"})]),
     el("span", {}, ["Nederbörd ", el("b", {text:n1(best.prec) + " mm/h"}), typeof best.pop === "number" ? " (" + best.pop + " %)" : ""])]));
-  var around = f.list.filter(function(t){ return Math.abs(t.u - u) <= 3.5*3600000; });
-  if(around.length > 1){ var hb = el("div", {class:"hours"}); around.forEach(function(t){ hb.appendChild(el("div", {class:t === best ? "cur" : ""}, [el("div", {text:hhmm(utcToLocalMins(p, t.u))}), el("div", {text:n1(t.temp) + "°"}), el("div", {text:n1(t.wind) + (typeof t.gust === "number" ? "(" + Math.round(t.gust) + ")" : "")}), el("div", {text:t.cloud !== null ? t.cloud + "%" : ""})])); }); box.appendChild(hb); }
-  box.appendChild(el("div", {class:"small", text:"Prognos från " + f.src + (Math.abs(off) >= 60 ? ", närmaste prognostid " + hhmm(utcToLocalMins(p, best.u)) : "") + ". Timrutor: tid, temperatur, vind (byar) m/s, moln."}));
+  box.appendChild(el("div", {class:"small", text:"Prognos från " + f.src + " för kl. " + hhmm(utcToLocalMins(p, best.u)) + (Math.abs(off) >= 60 ? " (närmaste prognostid)" : "") + "."}));
 }
 
 /* ===== data ===== */
