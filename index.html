@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bakgrunder">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#b85f00">
+<title>Bakgrundsbanken</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: karta eller rutnät av bakgrunder under en sök- och filterrad; detaljvy med solkompass och väder. */
+:root{
+  --bg:#eceeef; --surface:#ffffff; --sunk:#e2e5e7; --ink:#15191c; --muted:#59626a; --line:#d3d8dc;
+  --accent:#b85f00; --accent-ink:#ffffff; --accent-soft:#f6e7d4; --dir:#2c6aad;
+  --ok-bg:#e3f0dc; --ok-ink:#2b5212; --warn-bg:#f8ead2; --warn-ink:#6b3d00; --info-bg:#e1ebf6; --info-ink:#18406c; --danger:#b3261e;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#101315; --surface:#191d21; --sunk:#14181b; --ink:#e7eaec; --muted:#9aa3ab; --line:#2b3237;
+  --accent:#f0a33a; --accent-ink:#1d1200; --accent-soft:#3a2a12; --dir:#73acec;
+  --ok-bg:#1f3315; --ok-ink:#b7dd9c; --warn-bg:#3a2a10; --warn-ink:#f3cf8f; --info-bg:#172a3f; --info-ink:#b3d1f3; --danger:#ff8a80; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:max(16px,env(safe-area-inset-top,0px)) max(40px,env(safe-area-inset-bottom,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1,h2{font-family:var(--display);font-weight:600;letter-spacing:.01em;margin:0;text-wrap:balance}
+h1{font-size:32px;line-height:1}
+h2{font-size:24px;line-height:1.1}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.top .sub{color:var(--muted);font-size:13px;margin-top:4px}
+button,.btn{font:500 14px/1 var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:10px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}
+button:hover,.btn:hover{border-color:var(--muted)}
+button:disabled{opacity:.6;cursor:default}
+button:focus-visible,.btn:focus-visible,input:focus-visible,textarea:focus-visible,label.drop:focus-within{outline:2px solid var(--dir);outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.primary:hover{border-color:var(--accent);filter:brightness(1.05)}
+.ghost{background:transparent;border-color:transparent;color:var(--muted);padding-inline:8px}
+.danger{color:var(--danger)}
+input[type=text],input[type=search],input[type=number],input[type=date],input[type=email],input[type=password],textarea{font:16px/1.4 var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;min-width:0}
+textarea{min-height:76px;resize:vertical}
+.mono{font-family:var(--mono);font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:var(--surface)}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.searchrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.searchrow input{flex:1 1 220px}
+.filters{display:grid;gap:10px}
+.frow{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;min-width:0}
+.frow .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;min-width:84px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.chip{font:500 13px/1 var(--body);padding:7px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.chip .n{color:var(--muted);font-family:var(--mono);font-size:11px}
+.chip.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.chip.on .n{color:var(--bg)}
+.chip.role{border-style:dashed}
+.chip.static{cursor:default}
+.chip .x{border:0;background:none;padding:0 0 0 2px;color:inherit;font-size:15px;line-height:1;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer;text-align:left;padding:0;color:inherit;font:inherit;white-space:normal}
+.card:hover{border-color:var(--muted)}
+.card .ph{aspect-ratio:4/3;background:var(--sunk);position:relative;width:100%}
+.card .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.card .dirtag{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.62);color:#fff;font:500 11px/1 var(--mono);padding:5px 7px;border-radius:6px}
+.card .body{padding:10px 12px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;width:100%}
+.card .t{font:600 18px/1.15 var(--display)}
+.card .m{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.card .mini{display:flex;flex-wrap:wrap;gap:4px}
+.card .mini span{font-size:11.5px;padding:3px 7px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.card .mini span.r{background:var(--accent-soft);color:var(--ink)}
+#map{height:min(70vh,640px);border-radius:12px;border:1px solid var(--line);z-index:0}
+.leaflet-popup-content{font:13px/1.4 var(--body);margin:10px}
+.pop{display:flex;flex-direction:column;gap:6px;width:200px}
+.pop img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;background:#ddd}
+.pop b{font:600 16px/1.15 var(--display)}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:24px 20px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;max-width:640px}
+.empty p{margin:0;color:var(--muted)}
+.notice{border-radius:10px;padding:10px 12px;font-size:13.5px}
+.notice.warn{background:var(--warn-bg);color:var(--warn-ink)}
+.notice.info{background:var(--info-bg);color:var(--info-ink)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.auth{max-width:420px}
+.formgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px}
+@media (max-width:760px){.formgrid{grid-template-columns:minmax(0,1fr)}}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field>label,.field>.lab{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+label.drop{border:1.5px dashed var(--line);border-radius:10px;padding:26px 16px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;cursor:pointer;background:var(--sunk);color:var(--muted);position:relative}
+label.drop strong{color:var(--ink);font-weight:600}
+label.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.preview{border-radius:10px;overflow:hidden;background:var(--sunk)}
+.preview img{display:block;width:100%}
+.exif{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:13px;margin:0}
+.exif dt{color:var(--muted)}
+.exif dd{margin:0;font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere}
+.chipin{display:flex;flex-direction:column;gap:6px}
+.chipin .row{display:flex;gap:6px}
+.status{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center;min-height:20px}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp .9s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.detail{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.detail{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;border-radius:12px;overflow:hidden;background:#000;line-height:0}
+.stage img{width:100%;display:block;min-height:120px}
+.stage svg{position:absolute;inset:0;width:100%;height:100%}
+.timebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.timebar input[type=range]{flex:1 1 180px;accent-color:var(--accent)}
+.timebar input[type=date]{width:auto}
+.timebar .clock{font:600 20px/1 var(--mono);min-width:58px}
+.badge{display:inline-block;padding:6px 12px;border-radius:8px;font-weight:600;font-size:14px}
+.wx{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.wx .now{display:flex;gap:16px;flex-wrap:wrap;align-items:baseline}
+.wx .now .temp{font:600 30px/1 var(--display)}
+.wx .now .cond{font-weight:600}
+.wx .facts{display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px}
+.wx .facts span b{font-weight:600}
+.wx .hours{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.wx .hours div{background:var(--sunk);border-radius:8px;padding:6px;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
+.wx .hours div.cur{outline:2px solid var(--accent)}
+.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.meta{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;font-size:14px;margin:0}
+.meta dt{color:var(--muted);font-size:13px}
+.meta dd{margin:0;overflow-wrap:anywhere}
+.near{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.near button{padding:0;border-radius:8px;overflow:hidden;flex:0 0 120px;aspect-ratio:4/3}
+.near img{width:100%;height:100%;object-fit:cover;display:block}
+.note-text{white-space:pre-wrap;margin:0}
+.small{font-size:12.5px;color:var(--muted)}
+.err{color:var(--danger);font-size:13px}
+.mlist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mlist .mrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.mlist .mrow:first-child{border-top:0}
+.mlist .mrow .e{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Bakgrundsbanken</h1>
+      <div class="sub">Intervjubakgrunder med plats, solljus, väder och taggar</div>
+    </div>
+    <div class="actions" id="topActions" hidden>
+      <button type="button" class="primary" id="addBtn">＋ Lägg till bild</button>
+      <button type="button" class="ghost" id="membersBtn" hidden>Medlemmar</button>
+      <button type="button" class="ghost" id="logoutBtn">Logga ut</button>
+    </div>
+  </header>
+
+  <div id="gate" class="notice info" hidden></div>
+  <section id="authView" hidden></section>
+  <section id="formView" hidden></section>
+  <section id="membersView" hidden></section>
+  <section id="listView" hidden>
+    <div class="searchrow">
+      <div class="seg" role="group" aria-label="Visa som">
+        <button type="button" id="modeMap" aria-pressed="true">Karta</button>
+        <button type="button" id="modeGrid" aria-pressed="false">Bilder</button>
+      </div>
+      <input type="search" id="q" placeholder="Sök plats, tagg eller yrke" aria-label="Sök">
+      <button type="button" class="ghost" id="clearBtn" hidden>Rensa filter</button>
+    </div>
+    <div class="filters" id="filters" style="margin-top:12px"></div>
+    <div class="small" id="countLine" style="margin:12px 0 10px"></div>
+    <div id="map"></div>
+    <div class="grid" id="grid" hidden></div>
+    <div id="emptyBox"></div>
+  </section>
+  <section id="detailView" hidden></section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+<script>
+(function(){
+"use strict";
+/* ===== inställningar ===== */
+var SUPABASE_URL = "https://psdybcbxvirdmoionmit.supabase.co";
+var SUPABASE_KEY = "sb_publishable_zCi-hUDrcA_9Z8F-_oXU4g_ZJBIIVgA";
+var BUCKET = "bilder";
+
+var $ = function(id){ return document.getElementById(id); };
+var R2 = Math.PI/180;
+var sb = null, session = null, myEmail = "", myId = null, isAdmin = false;
+var photos = [], urlCache = {};
+var filt = {tags:new Set(), roles:new Set(), q:""};
+var mode = "map", form = null, map = null, markers = null, fitted = false;
+try{ var m0 = localStorage.getItem("bb_mode"); if(m0 === "grid" || m0 === "map") mode = m0; }catch(_e){}
+
+/* ===== hjälpare ===== */
+function el(tag, attrs, kids){
+  var e = document.createElement(tag);
+  if(attrs) for(var k in attrs){ var v = attrs[k];
+    if(k === "text") e.textContent = v; else if(k === "class") e.className = v;
+    else if(k.slice(0,2) === "on") e.addEventListener(k.slice(2), v);
+    else if(v !== null && v !== undefined && v !== false) e.setAttribute(k, v === true ? "" : v); }
+  (kids || []).forEach(function(c){ if(c == null) return; e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+  return e;
+}
+function norm(s){ return String(s || "").toLowerCase().replace(/[#,;]+/g," ").replace(/\s+/g," ").trim(); }
+function uniq(a){ var s = new Set(), out = []; a.forEach(function(x){ x = norm(x); if(x && !s.has(x)){ s.add(x); out.push(x); } }); return out; }
+function pad(n){ return String(n).padStart(2,"0"); }
+function hhmm(m){ m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m/60)) + ":" + pad(Math.round(m%60)); }
+function compass16(d){ var n = ["N","NNÖ","NÖ","ÖNÖ","Ö","ÖSÖ","SÖ","SSÖ","S","SSV","SV","VSV","V","VNV","NV","NNV"]; return n[Math.round(((d%360)+360)%360/22.5)%16]; }
+function fmtCoord(lat, lon){ return lat.toFixed(5) + ", " + lon.toFixed(5); }
+function hav(a,b,c,d){ var p1=a*R2,p2=c*R2,dp=(c-a)*R2,dl=(d-b)*R2; var x=Math.sin(dp/2)*Math.sin(dp/2)+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)*Math.sin(dl/2); return 12742000*Math.asin(Math.sqrt(x)); }
+function hasPos(p){ return typeof p.lat === "number" && typeof p.lon === "number" && isFinite(p.lat) && isFinite(p.lon); }
+function hasDir(p){ return typeof p.dir === "number" && isFinite(p.dir); }
+var MONTHS = ["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
+function fmtTaken(p){ if(!p.taken) return "Okänd tid"; var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(p.taken); if(!m) return p.taken; return (+m[3]) + " " + MONTHS[+m[2]-1] + " " + m[1] + ", " + m[4] + "." + m[5]; }
+
+/* ===== bild-URL:er (privat lagring, signerade länkar) ===== */
+async function signUrls(paths){
+  var now = Date.now(), need = paths.filter(function(p){ return p && !(urlCache[p] && urlCache[p].exp > now + 60000); });
+  need = Array.from(new Set(need));
+  for(var i = 0; i < need.length; i += 100){
+    var chunk = need.slice(i, i+100);
+    var r = await sb.storage.from(BUCKET).createSignedUrls(chunk, 3600);
+    (r.data || []).forEach(function(x){ if(x.signedUrl && x.path) urlCache[x.path] = {url:x.signedUrl, exp:now + 3500000}; });
+  }
+}
+function urlOf(path){ return path && urlCache[path] ? urlCache[path].url : ""; }
+
+/* ===== tidszon och sol ===== */
+function lastSundayUTC(y, m){ var d = new Date(Date.UTC(y, m+1, 0)); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return Date.UTC(y, m, d.getUTCDate(), 1); }
+function euSummer(u){ var y = new Date(u).getUTCFullYear(); return u >= lastSundayUTC(y,2) && u < lastSundayUTC(y,9); }
+function stdOffset(p){
+  if(typeof p.tz === "number" && p.taken){ var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(p.taken);
+    if(m){ var u = Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]) - p.tz*60000; return p.tz - (euSummer(u) ? 60 : 0); } }
+  if(hasPos(p)) return Math.round(p.lon/15)*60;
+  return 60;
+}
+function localToUtc(p, y, mo, d, mins){ var std = stdOffset(p); var u = Date.UTC(y, mo-1, d) + (mins - std)*60000; var off = std + (euSummer(u) ? 60 : 0); return Date.UTC(y, mo-1, d) + (mins - off)*60000; }
+function utcToLocalMins(p, u){ var std = stdOffset(p); var off = std + (euSummer(u) ? 60 : 0); var d = new Date(u + off*60000); return d.getUTCHours()*60 + d.getUTCMinutes(); }
+function sunPos(u, lat, lon){
+  var n = (u - Date.UTC(2000,0,1,12))/86400000;
+  var g = (357.529 + 0.98560028*n)*R2, q = 280.459 + 0.98564736*n;
+  var L = (q + 1.915*Math.sin(g) + 0.020*Math.sin(2*g))*R2, e = (23.439 - 0.00000036*n)*R2;
+  var ra = Math.atan2(Math.cos(e)*Math.sin(L), Math.cos(L)), dec = Math.asin(Math.sin(e)*Math.sin(L));
+  var gmst = (280.46061837 + 360.98564736629*n) % 360;
+  var H = (gmst + lon)*R2 - ra, la = lat*R2;
+  var alt = Math.asin(Math.sin(la)*Math.sin(dec) + Math.cos(la)*Math.cos(dec)*Math.cos(H));
+  var az = Math.atan2(Math.sin(H), Math.cos(H)*Math.sin(la) - Math.tan(dec)*Math.cos(la))/R2 + 180;
+  return {az:(az+360)%360, alt:alt/R2};
+}
+function verdict(az, dir){
+  var d = ((az - dir + 540) % 360) - 180, a = Math.abs(d), s = d > 0 ? "höger" : "vänster";
+  if(a <= 35) return ["Motljus: solen i bild","warn"];
+  if(a <= 70) return ["Snett motljus från " + s,"warn"];
+  if(a <= 110) return ["Sidoljus från " + s,"info"];
+  if(a <= 150) return ["Snett medljus från " + s,"ok"];
+  return ["Medljus: solen i ryggen","ok"];
+}
+
+/* ===== solkompass ===== */
+var NS = "http://www.w3.org/2000/svg";
+function sv(tag, a, txt){ var e = document.createElementNS(NS, tag); for(var k in a) e.setAttribute(k, a[k]); if(txt != null) e.textContent = txt; return e; }
+function drawCompass(svg, p, ymd, mins, dispW){
+  var W = p.w || 1600, H = p.h || 1200; svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.innerHTML = "";
+  var dw = dispW || W, ro = Math.max(64, Math.min(125, dw*0.13)), k = (ro/120) * (W/dw), RO = 120*k, RI = 78*k, CX = 165*k, CY = H - 168*k;
+  var dir = hasDir(p) ? p.dir : 0;
+  function xy(az, r){ var a = (az - dir)*R2; return [CX + r*Math.sin(a), CY - r*Math.cos(a)]; }
+  function lbl(x, y, t, size, fill){ return sv("text", {x:x, y:y, "text-anchor":"middle", "dominant-baseline":"central", fill:fill || "#fff", "font-size":size*k, "font-weight":700, "font-family":"IBM Plex Sans, system-ui, sans-serif", stroke:"#000", "stroke-width":3.5*k, "paint-order":"stroke"}, t); }
+  var defs = sv("defs", {});
+  [["ah","#ffd23f"],["ahs","#ff9f1a"]].forEach(function(m){ var mk = sv("marker", {id:m[0], viewBox:"0 0 10 10", refX:7, refY:5, markerWidth:4, markerHeight:4, orient:"auto-start-reverse"}); mk.appendChild(sv("path", {d:"M0 0L10 5L0 10z", fill:m[1], stroke:"#000", "stroke-width":1})); defs.appendChild(mk); });
+  svg.appendChild(defs);
+  svg.appendChild(sv("circle", {cx:CX, cy:CY, r:RO+30*k, fill:"#000", "fill-opacity":.45}));
+  if(hasDir(p)){ var a1 = xy(dir-35, RO+14*k), b1 = xy(dir+35, RO+14*k);
+    svg.appendChild(sv("path", {d:"M"+CX+" "+CY+"L"+a1[0]+" "+a1[1]+"A"+(RO+14*k)+" "+(RO+14*k)+" 0 0 1 "+b1[0]+" "+b1[1]+"Z", fill:"#378ADD", "fill-opacity":.22, stroke:"#85B7EB", "stroke-width":2*k})); }
+  svg.appendChild(sv("circle", {cx:CX, cy:CY, r:RO, fill:"none", stroke:"#fff", "stroke-opacity":.35, "stroke-width":2*k, "stroke-dasharray":(6*k)+" "+(10*k)}));
+  var g = sv("g", {}); svg.appendChild(g);
+  function arrow(az, txt, cur){ var a = xy(az, RO), b = xy(az, RI);
+    g.appendChild(sv("line", {x1:a[0], y1:a[1], x2:b[0], y2:b[1], stroke:"#000", "stroke-width":(cur?9:6)*k, "stroke-linecap":"round"}));
+    g.appendChild(sv("line", {x1:a[0], y1:a[1], x2:b[0], y2:b[1], stroke:cur?"#ff9f1a":"#ffd23f", "stroke-width":(cur?5.5:3.5)*k, "stroke-linecap":"round", "marker-end":cur?"url(#ahs)":"url(#ah)"}));
+    if(txt){ var l = xy(az, RO+16*k); g.appendChild(lbl(l[0], l[1], txt, 14)); } }
+  if(!hasPos(p)){ g.appendChild(lbl(CX, CY, "Position saknas", 13)); return null; }
+  var y = ymd[0], mo = ymd[1], d = ymd[2], rise = null, set = null, prev = null;
+  for(var m = 0; m <= 1440; m += 4){ var s0 = sunPos(localToUtc(p, y, mo, d, m), p.lat, p.lon);
+    if(prev !== null){ if(prev <= -0.83 && s0.alt > -0.83) rise = m; if(prev > -0.83 && s0.alt <= -0.83) set = m; } prev = s0.alt; }
+  for(var h = 0; h < 24; h++){ var s1 = sunPos(localToUtc(p, y, mo, d, h*60), p.lat, p.lon); if(s1.alt > 0) arrow(s1.az, String(h), false); }
+  if(rise !== null){ var pr = xy(sunPos(localToUtc(p,y,mo,d,rise),p.lat,p.lon).az, RI-26*k); g.appendChild(lbl(pr[0], pr[1], hhmm(rise), 11, "#ffe9a8")); }
+  if(set !== null){ var ps = xy(sunPos(localToUtc(p,y,mo,d,set),p.lat,p.lon).az, RI-26*k); g.appendChild(lbl(ps[0], ps[1], hhmm(set), 11, "#ffe9a8")); }
+  var np = xy(0, RO); g.appendChild(sv("circle", {cx:np[0], cy:np[1], r:11*k, fill:"#000", "fill-opacity":.7, stroke:"#fff", "stroke-width":1.5*k})); g.appendChild(lbl(np[0], np[1], "N", 13));
+  g.appendChild(sv("circle", {cx:CX, cy:CY, r:6*k, fill:"#fff", stroke:"#000", "stroke-width":2*k}));
+  var s = sunPos(localToUtc(p, y, mo, d, mins), p.lat, p.lon);
+  if(s.alt > -0.83){ arrow(s.az, null, true); var sp = xy(s.az, RO); g.appendChild(sv("circle", {cx:sp[0], cy:sp[1], r:10*k, fill:"#ff9f1a", stroke:"#fff", "stroke-width":2*k})); }
+  return {sun:s, rise:rise, set:set};
+}
+
+/* ===== väder (SMHI, met.no som reserv) ===== */
+var SMHI_SYM = ["","Klart","Lätt molnighet","Halvklart","Molnigt","Mycket moln","Mulet","Dimma","Lätt regnskur","Regnskur","Kraftig regnskur","Åskskur","Lätt by av regn och snö","By av regn och snö","Kraftig by av regn och snö","Lätt snöby","Snöby","Kraftig snöby","Lätt regn","Regn","Kraftigt regn","Åska","Lätt snöblandat regn","Snöblandat regn","Kraftigt snöblandat regn","Lätt snöfall","Snöfall","Ytligt snöfall"];
+function metSym(c){ c = String(c || "").replace(/_(day|night|polartwilight)$/,"");
+  var map = {clearsky:"Klart",fair:"Lätt molnighet",partlycloudy:"Halvklart",cloudy:"Mulet",fog:"Dimma"};
+  if(map[c]) return map[c];
+  var t = c.indexOf("thunder") >= 0 ? " med åska" : "", s = c.indexOf("showers") >= 0 ? "skurar" : "";
+  var base = c.replace("andthunder","").replace("showers","");
+  var w = {lightrain:"Lätt regn",rain:"Regn",heavyrain:"Kraftigt regn",lightsleet:"Lätt snöblandat regn",sleet:"Snöblandat regn",heavysleet:"Kraftigt snöblandat regn",lightsnow:"Lätt snöfall",snow:"Snöfall",heavysnow:"Kraftigt snöfall"}[base] || c;
+  return w + (s ? " (" + s + ")" : "") + t; }
+var wxCache = {};
+async function getForecast(p){
+  var key = p.lat.toFixed(3) + "," + p.lon.toFixed(3);
+  if(wxCache[key] && wxCache[key].t > Date.now() - 20*60000) return wxCache[key].d;
+  var out = null;
+  try{
+    var r = await fetch("https://opendata-download-metfcst.smhi.se/api/category/snow1g/version/1/geotype/point/lon/" + p.lon.toFixed(4) + "/lat/" + p.lat.toFixed(4) + "/data.json");
+    if(r.ok){ var j = await r.json(); out = {src:"SMHI", list:(j.timeSeries || []).map(function(t){ var d = t.data || {}; return {u:Date.parse(t.time), temp:d.air_temperature, wind:d.wind_speed, gust:d.wind_speed_of_gust, wdir:d.wind_from_direction, cloud:typeof d.cloud_area_fraction === "number" ? Math.round(d.cloud_area_fraction/8*100) : null, prec:d.precipitation_amount_mean, pop:d.probability_of_precipitation, sym:SMHI_SYM[d.symbol_code] || ""}; })}; }
+  }catch(_e){}
+  if(!out){
+    try{
+      var r2 = await fetch("https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=" + p.lat.toFixed(4) + "&lon=" + p.lon.toFixed(4));
+      if(r2.ok){ var j2 = await r2.json(); out = {src:"met.no", list:((j2.properties || {}).timeseries || []).map(function(t){ var d = (t.data && t.data.instant && t.data.instant.details) || {}, n1 = t.data.next_1_hours || t.data.next_6_hours || {}; return {u:Date.parse(t.time), temp:d.air_temperature, wind:d.wind_speed, gust:d.wind_speed_of_gust, wdir:d.wind_from_direction, cloud:typeof d.cloud_area_fraction === "number" ? Math.round(d.cloud_area_fraction) : null, prec:n1.details ? n1.details.precipitation_amount : null, pop:null, sym:n1.summary ? metSym(n1.summary.symbol_code) : ""}; })}; }
+    }catch(_e){}
+  }
+  if(out) wxCache[key] = {t:Date.now(), d:out};
+  return out;
+}
+function n1(x){ return typeof x === "number" ? (Math.round(x*10)/10).toString().replace(".", ",") : "–"; }
+async function renderWeather(box, p, u){
+  box.innerHTML = "";
+  if(!hasPos(p)){ box.appendChild(el("div", {class:"small", text:"Position saknas, så väder kan inte visas."})); return; }
+  var now = Date.now();
+  if(u < now - 2*3600000){ box.appendChild(el("div", {class:"small", text:"Vald tid har passerat. Väderprognos visas bara framåt i tiden."})); return; }
+  if(u > now + 10.5*86400000){ box.appendChild(el("div", {class:"small", text:"Prognos finns bara cirka 10 dygn fram. Välj ett närmare datum."})); return; }
+  var st = el("div", {class:"status"}, [el("span", {class:"spin"}), "Hämtar väder…"]); box.appendChild(st);
+  var f = await getForecast(p);
+  if(!box.isConnected) return;
+  box.innerHTML = "";
+  if(!f || !f.list.length){ box.appendChild(el("div", {class:"small", text:"Vädret gick inte att hämta just nu."})); return; }
+  var best = null; f.list.forEach(function(t){ if(!best || Math.abs(t.u - u) < Math.abs(best.u - u)) best = t; });
+  if(!best || Math.abs(best.u - u) > 7*3600000){ box.appendChild(el("div", {class:"small", text:"Ingen prognos för vald tid."})); return; }
+  var off = Math.round((best.u - u)/60000);
+  box.appendChild(el("div", {class:"now"}, [el("span", {class:"temp", text:n1(best.temp) + "°"}), el("span", {class:"cond", text:best.sym || ""})]));
+  box.appendChild(el("div", {class:"facts"}, [
+    el("span", {}, ["Vind ", el("b", {text:n1(best.wind) + " m/s"}), typeof best.gust === "number" ? " (byar " + n1(best.gust) + ")" : "", typeof best.wdir === "number" ? " från " + compass16(best.wdir) : ""]),
+    el("span", {}, ["Moln ", el("b", {text:best.cloud !== null ? best.cloud + " %" : "–"})]),
+    el("span", {}, ["Nederbörd ", el("b", {text:n1(best.prec) + " mm/h"}), typeof best.pop === "number" ? " (" + best.pop + " %)" : ""])]));
+  var around = f.list.filter(function(t){ return Math.abs(t.u - u) <= 3.5*3600000; });
+  if(around.length > 1){ var hb = el("div", {class:"hours"}); around.forEach(function(t){ hb.appendChild(el("div", {class:t === best ? "cur" : ""}, [el("div", {text:hhmm(utcToLocalMins(p, t.u))}), el("div", {text:n1(t.temp) + "°"}), el("div", {text:n1(t.wind) + (typeof t.gust === "number" ? "(" + Math.round(t.gust) + ")" : "")}), el("div", {text:t.cloud !== null ? t.cloud + "%" : ""})])); }); box.appendChild(hb); }
+  box.appendChild(el("div", {class:"small", text:"Prognos från " + f.src + (Math.abs(off) >= 60 ? ", närmaste prognostid " + hhmm(utcToLocalMins(p, best.u)) : "") + ". Timrutor: tid, temperatur, vind (byar) m/s, moln."}));
+}
+
+/* ===== data ===== */
+function vocab(field){ var c = new Map(); photos.forEach(function(p){ (p[field] || []).forEach(function(t){ c.set(t, (c.get(t) || 0) + 1); }); });
+  return Array.from(c.entries()).sort(function(a,b){ return b[1]-a[1] || a[0].localeCompare(b[0],"sv"); }); }
+function matches(p){
+  var ok = true;
+  filt.tags.forEach(function(t){ if((p.tags || []).indexOf(t) < 0) ok = false; });
+  filt.roles.forEach(function(t){ if((p.roles || []).indexOf(t) < 0) ok = false; });
+  if(ok && filt.q){ var hay = [p.title, p.note, (p.tags||[]).join(" "), (p.roles||[]).join(" ")].join(" ").toLowerCase();
+    filt.q.split(/\s+/).forEach(function(w){ if(w && hay.indexOf(w) < 0) ok = false; }); }
+  return ok;
+}
+async function loadPhotos(){
+  var r = await sb.from("photos").select("*").order("created_at", {ascending:false});
+  if(r.error){ $("countLine").textContent = "Kunde inte läsa bakgrunderna: " + r.error.message; return; }
+  photos = r.data || [];
+  await signUrls(photos.map(function(p){ return p.thumb_path; }));
+  route();
+}
+
+/* ===== lista, karta ===== */
+function renderFilters(){
+  var box = $("filters"); box.innerHTML = "";
+  [["tags","Ämnen", filt.tags, false],["roles","Passar för", filt.roles, true]].forEach(function(cfg){
+    var v = vocab(cfg[0]); if(!v.length) return;
+    var chips = el("div", {class:"chips"});
+    v.forEach(function(e, i){
+      var on = cfg[2].has(e[0]);
+      var c = el("button", {type:"button", class:"chip" + (cfg[3] ? " role" : "") + (on ? " on" : ""), "aria-pressed":on ? "true" : "false", onclick:function(){ if(cfg[2].has(e[0])) cfg[2].delete(e[0]); else cfg[2].add(e[0]); fitted = false; renderList(); }}, [e[0], el("span", {class:"n", text:String(e[1])})]);
+      if(i >= 16 && !on) c.hidden = true;
+      chips.appendChild(c);
+    });
+    if(v.length > 16){ var more = el("button", {type:"button", class:"chip ghost", text:"Visa alla " + v.length, onclick:function(){ chips.querySelectorAll(".chip[hidden]").forEach(function(x){ x.hidden = false; }); more.remove(); }}); chips.appendChild(more); }
+    box.appendChild(el("div", {class:"frow"}, [el("span", {class:"lbl", text:cfg[1]}), chips]));
+  });
+  $("clearBtn").hidden = !(filt.tags.size || filt.roles.size || filt.q);
+}
+function card(p){
+  var img = el("img", {src:urlOf(p.thumb_path), alt:p.title || "Bakgrund", loading:"lazy"});
+  var ph = el("div", {class:"ph"}, [img]);
+  if(hasDir(p)) ph.appendChild(el("span", {class:"dirtag", text:"↑ " + compass16(p.dir) + " " + Math.round(p.dir) + "°"}));
+  var mini = el("div", {class:"mini"});
+  (p.roles || []).slice(0,3).forEach(function(t){ mini.appendChild(el("span", {class:"r", text:t})); });
+  (p.tags || []).slice(0,4).forEach(function(t){ mini.appendChild(el("span", {text:t})); });
+  return el("button", {type:"button", class:"card", onclick:function(){ location.hash = "bild-" + p.id; }}, [ph,
+    el("div", {class:"body"}, [el("div", {class:"t", text:p.title || "Namnlös plats"}), el("div", {class:"m", text:fmtTaken(p)}), mini])]);
+}
+function ensureMap(){
+  if(map) return;
+  map = L.map("map", {zoomControl:true}).setView([59.3293, 18.0686], 12);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(map);
+  markers = L.layerGroup().addTo(map);
+}
+function renderMap(list){
+  ensureMap(); setTimeout(function(){ map.invalidateSize(); }, 50);
+  markers.clearLayers(); var pts = [];
+  var css = getComputedStyle(document.documentElement), acc = css.getPropertyValue("--accent").trim() || "#b85f00";
+  list.filter(hasPos).forEach(function(p){
+    var mk = L.circleMarker([p.lat, p.lon], {radius:9, color:"#fff", weight:2.5, fillColor:acc, fillOpacity:1});
+    var pop = el("div", {class:"pop"}, [el("img", {src:urlOf(p.thumb_path), alt:""}), el("b", {text:p.title || "Namnlös plats"}), el("span", {class:"small", text:fmtTaken(p)}), el("button", {type:"button", class:"primary", text:"Öppna", onclick:function(){ location.hash = "bild-" + p.id; }})]);
+    mk.bindPopup(pop, {maxWidth:230}); mk.addTo(markers); pts.push([p.lat, p.lon]);
+  });
+  if(!fitted && pts.length){ fitted = true; if(pts.length === 1) map.setView(pts[0], 15); else map.fitBounds(pts, {padding:[30,30], maxZoom:16}); }
+}
+function renderList(){
+  renderFilters();
+  var list = photos.filter(matches);
+  $("modeMap").setAttribute("aria-pressed", mode === "map"); $("modeGrid").setAttribute("aria-pressed", mode === "grid");
+  $("map").hidden = mode !== "map"; $("grid").hidden = mode !== "grid";
+  var grid = $("grid"); grid.innerHTML = "";
+  if(mode === "grid") list.forEach(function(p){ grid.appendChild(card(p)); }); else renderMap(list);
+  var noPos = list.filter(function(p){ return !hasPos(p); }).length;
+  $("countLine").textContent = photos.length ? ((list.length === photos.length ? photos.length + (photos.length === 1 ? " bakgrund" : " bakgrunder") : list.length + " av " + photos.length + " bakgrunder") + (mode === "map" && noPos ? ", varav " + noPos + " utan position (syns under Bilder)" : "")) : "";
+  var eb = $("emptyBox"); eb.innerHTML = "";
+  if(!photos.length){ eb.appendChild(el("div", {class:"empty", style:"margin-top:12px"}, [el("h2", {text:"Lägg till första bakgrunden"}), el("p", {text:"Ta en bild med mobilen där du hittar en bra intervjubakgrund. Plats, tid och kamerariktning läses ur bilden."}), el("button", {type:"button", class:"primary", text:"＋ Lägg till bild", onclick:function(){ openForm("new"); }})])); }
+  else if(!list.length){ eb.appendChild(el("div", {class:"empty", style:"margin-top:12px"}, [el("p", {text:"Inga bakgrunder matchar filtret."}), el("button", {type:"button", text:"Rensa filter", onclick:clearFilters})])); }
+}
+function clearFilters(){ filt.tags.clear(); filt.roles.clear(); filt.q = ""; $("q").value = ""; fitted = false; renderList(); }
+
+/* ===== detaljvy ===== */
+var detailState = null;
+function todayYMD(){ var n = new Date(); return [n.getFullYear(), n.getMonth()+1, n.getDate()]; }
+function photoYMD(p){ var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(p.taken || ""); return m ? {ymd:[+m[1],+m[2],+m[3]], mins:(+m[4])*60 + (+m[5])} : null; }
+async function renderDetail(id){
+  var p = photos.find(function(x){ return String(x.id) === id; }); var v = $("detailView"); v.innerHTML = "";
+  if(!p){ v.appendChild(el("div", {class:"empty"}, [el("p", {text:"Bilden finns inte längre."}), el("button", {type:"button", text:"← Alla bakgrunder", onclick:goList})])); return; }
+  await signUrls([p.full_path]);
+  if(!detailState || detailState.id !== id){ var n = new Date(); detailState = {id:id, ymd:todayYMD(), mins:Math.min(1430, Math.ceil((n.getHours()*60 + n.getMinutes())/30)*30)}; }
+  var svg = document.createElementNS(NS, "svg"); svg.setAttribute("role","img"); svg.setAttribute("aria-label","Solkompass: solens riktning varje timme i förhållande till bildriktningen");
+  var stage = el("div", {class:"stage"}, [el("img", {src:urlOf(p.full_path), alt:p.title || "Bakgrund"}), svg]);
+  var dateIn = el("input", {type:"date", id:"dDate", "aria-label":"Datum"});
+  var range = el("input", {type:"range", id:"dTime", min:"0", max:"1430", step:"10", "aria-label":"Klockslag"});
+  var clock = el("span", {class:"clock"}), badge = el("span", {class:"badge"}), info = el("div", {class:"small"});
+  var wx = el("div", {class:"wx"}), wxTimer = null;
+  function ymdStr(a){ return a[0] + "-" + pad(a[1]) + "-" + pad(a[2]); }
+  function upd(){
+    dateIn.value = ymdStr(detailState.ymd); range.value = detailState.mins; clock.textContent = hhmm(detailState.mins);
+    var r = drawCompass(svg, p, detailState.ymd, detailState.mins, stage.clientWidth);
+    if(!r){ badge.textContent = "Lägg till position för solkompass och väder"; badge.style.background = "var(--sunk)"; badge.style.color = "var(--muted)"; info.textContent = ""; }
+    else {
+      if(r.sun.alt > -0.83 && hasDir(p)){ var vv = verdict(r.sun.az, p.dir); badge.textContent = vv[0]; badge.style.background = "var(--" + vv[1] + "-bg)"; badge.style.color = "var(--" + vv[1] + "-ink)"; }
+      else if(r.sun.alt > -0.83){ badge.textContent = "Bildriktning saknas"; badge.style.background = "var(--sunk)"; badge.style.color = "var(--muted)"; }
+      else { badge.textContent = "Solen under horisonten"; badge.style.background = "var(--sunk)"; badge.style.color = "var(--muted)"; }
+      info.textContent = "Sol i " + Math.round(r.sun.az) + "° (" + compass16(r.sun.az) + "), höjd " + Math.round(r.sun.alt) + "°. Upp " + (r.rise !== null ? hhmm(r.rise) : "–") + ", ned " + (r.set !== null ? hhmm(r.set) : "–") + ". Skuggor från hus är inte inräknade.";
+    }
+    clearTimeout(wxTimer); wxTimer = setTimeout(function(){ var y = detailState.ymd; renderWeather(wx, p, localToUtc(p, y[0], y[1], y[2], detailState.mins)); }, 250);
+  }
+  dateIn.addEventListener("change", function(){ var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateIn.value); if(m){ detailState.ymd = [+m[1],+m[2],+m[3]]; upd(); } });
+  range.addEventListener("input", function(){ detailState.mins = +range.value; upd(); });
+  var pt = photoYMD(p);
+  var quick = el("div", {class:"actions"}, [
+    el("button", {type:"button", text:"I dag", onclick:function(){ detailState.ymd = todayYMD(); upd(); }}),
+    el("button", {type:"button", text:"I morgon", onclick:function(){ var t = new Date(Date.now() + 86400000); detailState.ymd = [t.getFullYear(), t.getMonth()+1, t.getDate()]; upd(); }}),
+    pt ? el("button", {type:"button", text:"Fotodatum", onclick:function(){ detailState.ymd = pt.ymd; detailState.mins = pt.mins; upd(); }}) : null,
+    el("button", {type:"button", text:"Midsommar", onclick:function(){ detailState.ymd = [detailState.ymd[0],6,21]; upd(); }}),
+    el("button", {type:"button", text:"Midvinter", onclick:function(){ detailState.ymd = [detailState.ymd[0],12,21]; upd(); }})]);
+  var left = el("div", {style:"display:flex;flex-direction:column;gap:12px;min-width:0"}, [stage, el("div", {class:"timebar"}, [dateIn, range, clock]), quick, el("div", {}, [badge]), info, el("div", {class:"field"}, [el("span", {class:"lab", text:"Väder vid vald tid"}), wx])]);
+  var meta = el("dl", {class:"meta"});
+  function row(k, val, mono){ meta.appendChild(el("dt", {text:k})); meta.appendChild(el("dd", {class:mono ? "mono" : null, text:val})); }
+  row("Fotograferad", fmtTaken(p));
+  row("Position", hasPos(p) ? fmtCoord(p.lat, p.lon) + (p.acc ? "  ±" + Math.round(p.acc) + " m" : "") : "Saknas", hasPos(p));
+  row("Bildriktning", hasDir(p) ? Math.round(p.dir) + "° (" + compass16(p.dir) + ")" : "Saknas");
+  if(p.camera) row("Kamera", p.camera + (p.f35 ? ", " + p.f35 + " mm (35 mm-ekv.)" : ""));
+  if(p.created_by_email) row("Tillagd av", p.created_by_email + (p.created_at ? ", " + String(p.created_at).slice(0,10) : ""));
+  var tagsBox = el("div", {class:"chips"}); (p.tags || []).forEach(function(t){ tagsBox.appendChild(el("button", {type:"button", class:"chip", text:t, onclick:function(){ clearFilters(); filt.tags.add(t); mode = "grid"; goList(); }})); });
+  var rolesBox = el("div", {class:"chips"}); (p.roles || []).forEach(function(t){ rolesBox.appendChild(el("button", {type:"button", class:"chip role", text:t, onclick:function(){ clearFilters(); filt.roles.add(t); mode = "grid"; goList(); }})); });
+  var links = el("div", {class:"actions"});
+  if(hasPos(p)){
+    links.appendChild(el("a", {class:"btn", href:"https://www.yr.no/en/forecast/hourly-table/" + p.lat.toFixed(4) + "," + p.lon.toFixed(4), target:"_blank", rel:"noopener", text:"Yr ↗"}));
+    links.appendChild(el("a", {class:"btn", href:"https://www.google.com/maps/search/?api=1&query=" + p.lat.toFixed(6) + "," + p.lon.toFixed(6), target:"_blank", rel:"noopener", text:"Google Maps ↗"}));
+  }
+  var edit = el("div", {class:"actions"}, [el("button", {type:"button", text:"Redigera", onclick:function(){ openForm("edit", p); }})]);
+  if(isAdmin || (myId && p.created_by === myId)){
+    var delBtn = el("button", {type:"button", class:"ghost danger", text:"Ta bort"});
+    delBtn.addEventListener("click", async function(){
+      if(delBtn.dataset.armed !== "1"){ delBtn.dataset.armed = "1"; delBtn.textContent = "Bekräfta: ta bort för alla"; setTimeout(function(){ if(delBtn.isConnected){ delBtn.dataset.armed = ""; delBtn.textContent = "Ta bort"; } }, 5000); return; }
+      delBtn.disabled = true; delBtn.textContent = "Tar bort…";
+      var r = await sb.from("photos").delete().eq("id", p.id);
+      if(r.error){ delBtn.disabled = false; delBtn.textContent = "Kunde inte ta bort. Försök igen"; return; }
+      await sb.storage.from(BUCKET).remove([p.full_path, p.thumb_path]);
+      photos = photos.filter(function(x){ return x.id !== p.id; }); goList();
+    });
+    edit.appendChild(delBtn);
+  }
+  var near = photos.filter(function(x){ return x.id !== p.id && hasPos(x) && hasPos(p) && hav(p.lat,p.lon,x.lat,x.lon) < 60; });
+  var nearBox = near.length ? el("div", {class:"field"}, [el("span", {class:"lab", text:"Fler bilder från samma plats"}), el("div", {class:"near"}, near.map(function(x){ return el("button", {type:"button", "aria-label":x.title || "Bild", onclick:function(){ location.hash = "bild-" + x.id; }}, [el("img", {src:urlOf(x.thumb_path), alt:""})]); }))]) : null;
+  var side = el("div", {class:"side"}, [el("h2", {text:p.title || "Namnlös plats"}), p.note ? el("p", {class:"note-text", text:p.note}) : null,
+    (p.roles || []).length ? el("div", {class:"field"}, [el("span", {class:"lab", text:"Passar för"}), rolesBox]) : null,
+    (p.tags || []).length ? el("div", {class:"field"}, [el("span", {class:"lab", text:"Ämnen"}), tagsBox]) : null,
+    meta, links, nearBox, edit]);
+  v.appendChild(el("div", {class:"actions"}, [el("button", {type:"button", class:"ghost", text:"← Alla bakgrunder", onclick:goList})]));
+  v.appendChild(el("div", {class:"detail", style:"margin-top:10px"}, [left, side]));
+  upd();
+  if(window.ResizeObserver){ var lastW = stage.clientWidth; new ResizeObserver(function(){ if(stage.isConnected && Math.abs(stage.clientWidth - lastW) > 20){ lastW = stage.clientWidth; drawCompass(svg, p, detailState.ymd, detailState.mins, lastW); } }).observe(stage); }
+}
+function goList(){ if(location.hash) history.replaceState(null, "", location.pathname + location.search); route(); }
+
+/* ===== formulär ===== */
+function chipInput(label, items, vocabList, isRole){
+  var state = {items:uniq(items)};
+  var wrap = el("div", {class:"field chipin"});
+  var listId = "dl-" + Math.random().toString(36).slice(2);
+  var dl = el("datalist", {id:listId}); vocabList.forEach(function(v){ dl.appendChild(el("option", {value:v[0]})); });
+  var chips = el("div", {class:"chips"});
+  var input = el("input", {type:"text", list:listId, placeholder:isRole ? "Lägg till yrke, till exempel polis" : "Lägg till tagg", "aria-label":label, enterkeyhint:"done"});
+  function draw(){ chips.innerHTML = ""; state.items.forEach(function(t){ chips.appendChild(el("span", {class:"chip static" + (isRole ? " role" : "")}, [t, el("button", {type:"button", class:"x", "aria-label":"Ta bort " + t, text:"×", onclick:function(){ state.items = state.items.filter(function(x){ return x !== t; }); draw(); }})])); }); }
+  function commit(){ var added = false; input.value.split(",").forEach(function(s){ s = norm(s); if(s && state.items.indexOf(s) < 0){ state.items.push(s); added = true; } }); input.value = ""; if(added) draw(); }
+  input.addEventListener("keydown", function(e){ if(e.key === "Enter" || e.key === ","){ e.preventDefault(); commit(); } });
+  input.addEventListener("change", function(){ if(vocabList.some(function(v){ return v[0] === norm(input.value); })) commit(); });
+  wrap.appendChild(el("span", {class:"lab", text:label})); wrap.appendChild(chips); wrap.appendChild(el("div", {class:"row"}, [input, el("button", {type:"button", text:"Lägg till", onclick:commit})])); wrap.appendChild(dl);
+  draw(); state.el = wrap; state.flush = commit;
+  return state;
+}
+function parseCoords(s){ s = String(s || "").trim(); if(!s) return null; var m = /(-?\d{1,2}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)/.exec(s.replace(/@/g," ")); if(!m) return null; var la = parseFloat(m[1]), lo = parseFloat(m[2]); if(Math.abs(la) > 90 || Math.abs(lo) > 180) return null; return {lat:la, lon:lo}; }
+function showOnly(id){ ["authView","formView","membersView","listView","detailView"].forEach(function(x){ $(x).hidden = x !== id; }); }
+function openForm(mode2, p){
+  if(location.hash) history.replaceState(null, "", location.pathname + location.search);
+  form = {mode:mode2, id:p ? p.id : null};
+  var d = p ? p : {tags:[], roles:[]};
+  showOnly("formView"); $("topActions").hidden = true;
+  var v = $("formView"); v.innerHTML = "";
+  var panel = el("div", {class:"panel"});
+  panel.appendChild(el("div", {class:"actions", style:"justify-content:space-between"}, [el("h2", {text:mode2 === "new" ? "Ny bakgrund" : "Redigera bakgrund"}), el("button", {type:"button", class:"ghost", text:"Avbryt", onclick:closeForm})]));
+  if(mode2 === "new") panel.appendChild(el("div", {class:"notice warn", text:"Ladda inte upp bilder med igenkännbara personer eller källskyddat material. Bilden och dess position syns för alla medlemmar."}));
+  var leftCol = el("div", {class:"field", style:"gap:12px"}), rightCol = el("div", {class:"field", style:"gap:14px"});
+  var preview = el("div", {class:"preview"}), exifBox = el("dl", {class:"exif"}), status = el("div", {class:"status", role:"status"});
+  if(mode2 === "new"){
+    var fileIn = el("input", {type:"file", id:"fileIn", accept:"image/*"});
+    leftCol.appendChild(el("label", {class:"drop", for:"fileIn"}, [el("strong", {text:"Välj eller ta en bild"}), el("span", {class:"small", text:"Från mobilens kamera eller bildbibliotek. Plats, tid och riktning läses ur bilden."}), fileIn]));
+    fileIn.addEventListener("change", function(){ if(fileIn.files && fileIn.files[0]) onFile(fileIn.files[0]); });
+  } else { signUrls([d.thumb_path]).then(function(){ preview.appendChild(el("img", {src:urlOf(d.thumb_path), alt:""})); }); }
+  leftCol.appendChild(preview); leftCol.appendChild(exifBox); leftCol.appendChild(status);
+  var titleIn = el("input", {type:"text", id:"fTitle", value:d.title || "", placeholder:"Till exempel Slussen, utsikt mot Riddarholmen"});
+  var noteIn = el("textarea", {id:"fNote", placeholder:"Vad syns, bästa vinkel, ström, var man ställer sig…"}); noteIn.value = d.note || "";
+  var rolesC = chipInput("Passar för (yrken)", d.roles || [], vocab("roles"), true);
+  var tagsC = chipInput("Ämnen och plats", d.tags || [], vocab("tags"), false);
+  var posIn = el("input", {type:"text", id:"fPos", class:"mono", inputmode:"decimal", value:hasPos(d) ? fmtCoord(d.lat, d.lon) : "", placeholder:"59.32081, 18.06998"});
+  var dirIn = el("input", {type:"number", id:"fDir", min:"0", max:"359", step:"1", inputmode:"numeric", value:hasDir(d) ? String(Math.round(d.dir)) : "", placeholder:"232"});
+  rightCol.appendChild(el("div", {class:"field"}, [el("label", {for:"fTitle", text:"Plats"}), titleIn]));
+  rightCol.appendChild(rolesC.el); rightCol.appendChild(tagsC.el);
+  rightCol.appendChild(el("div", {class:"field"}, [el("label", {for:"fNote", text:"Anteckning"}), noteIn]));
+  rightCol.appendChild(el("div", {class:"two"}, [
+    el("div", {class:"field"}, [el("label", {for:"fPos", text:"Position (lat, lon)"}), posIn, el("span", {class:"small", text:"Klistra in från Google Maps om bilden saknar GPS."})]),
+    el("div", {class:"field"}, [el("label", {for:"fDir", text:"Bildriktning (°)"}), dirIn, el("span", {class:"small", text:"0 = norr, 90 = öster, 180 = söder, 270 = väster."})])]));
+  var err = el("div", {class:"err", role:"alert"});
+  var saveBtn = el("button", {type:"button", class:"primary", text:mode2 === "new" ? "Spara bakgrund" : "Spara ändringar"});
+  rightCol.appendChild(err); rightCol.appendChild(el("div", {class:"actions"}, [saveBtn, el("button", {type:"button", class:"ghost", text:"Avbryt", onclick:closeForm})]));
+  panel.appendChild(el("div", {class:"formgrid"}, [leftCol, rightCol]));
+  v.appendChild(panel); window.scrollTo(0, 0);
+
+  function showExif(){
+    exifBox.innerHTML = ""; var e = form.exif || {};
+    function r(k, val){ exifBox.appendChild(el("dt", {text:k})); exifBox.appendChild(el("dd", {text:val})); }
+    r("Tid", e.taken ? fmtTaken({taken:e.taken}) : "saknas i bilden");
+    r("Position", typeof e.lat === "number" ? fmtCoord(e.lat, e.lon) + (e.acc ? " ±" + Math.round(e.acc) + " m" : "") : "saknas i bilden");
+    r("Riktning", typeof e.dir === "number" ? Math.round(e.dir) + "° (" + compass16(e.dir) + ")" : "saknas i bilden");
+    if(e.camera) r("Kamera", e.camera + (e.f35 ? ", " + e.f35 + " mm" : ""));
+    status.textContent = typeof e.lat === "number" ? "" : "Bilden saknar GPS. Fyll i position för karta, solkompass och väder.";
+  }
+  async function onFile(file){
+    err.textContent = ""; preview.innerHTML = ""; exifBox.innerHTML = ""; form.blobFull = null;
+    status.innerHTML = ""; status.appendChild(el("span", {class:"spin"})); status.appendChild(document.createTextNode("Läser bilden…"));
+    var e = {};
+    try{
+      var x = await window.exifr.parse(file, {tiff:true, exif:true, gps:true, xmp:false, icc:false, iptc:false, reviveValues:false, translateValues:false, mergeOutput:true});
+      if(x){ if(typeof x.latitude === "number" && typeof x.longitude === "number"){ e.lat = x.latitude; e.lon = x.longitude; }
+        if(typeof x.GPSImgDirection === "number") e.dir = ((x.GPSImgDirection % 360) + 360) % 360;
+        if(typeof x.GPSHPositioningError === "number") e.acc = x.GPSHPositioningError;
+        var m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):?(\d{2})?/.exec(String(x.DateTimeOriginal || x.CreateDate || x.ModifyDate || ""));
+        if(m) e.taken = m[1] + "-" + m[2] + "-" + m[3] + "T" + m[4] + ":" + m[5] + ":" + (m[6] || "00");
+        var off = /^([+-])(\d{2}):(\d{2})$/.exec(String(x.OffsetTimeOriginal || x.OffsetTime || "")); if(off) e.tz = (off[1] === "-" ? -1 : 1) * ((+off[2])*60 + (+off[3]));
+        if(x.Model) e.camera = String(x.Model); if(typeof x.FocalLengthIn35mmFormat === "number") e.f35 = x.FocalLengthIn35mmFormat; }
+    }catch(_e){}
+    form.exif = e;
+    var bmp = null;
+    try{ bmp = await createImageBitmap(file, {imageOrientation:"from-image"}); }
+    catch(_e){ try{ bmp = await new Promise(function(res, rej){ var im = new Image(); im.onload = function(){ res(im); }; im.onerror = rej; im.src = URL.createObjectURL(file); }); }catch(_e2){} }
+    if(!bmp){ status.textContent = ""; err.textContent = "Bildformatet gick inte att läsa (troligen HEIC). Välj JPEG, eller ställ in iPhone på Kamera › Format › Mest kompatibel."; return; }
+    var W = bmp.width || bmp.naturalWidth, H = bmp.height || bmp.naturalHeight;
+    function scaled(max, q){ var s = Math.min(1, max / Math.max(W, H)); var c = document.createElement("canvas"); c.width = Math.round(W*s); c.height = Math.round(H*s); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); return new Promise(function(res){ c.toBlob(function(b){ res({blob:b, w:c.width, h:c.height}); }, "image/jpeg", q); }); }
+    var full = await scaled(2560, 0.86), thumb = await scaled(720, 0.8);
+    form.blobFull = full.blob; form.blobThumb = thumb.blob; form.w = full.w; form.h = full.h;
+    preview.appendChild(el("img", {src:URL.createObjectURL(thumb.blob), alt:"Förhandsvisning"}));
+    if(typeof e.lat === "number" && !posIn.value) posIn.value = fmtCoord(e.lat, e.lon);
+    if(typeof e.dir === "number" && !dirIn.value) dirIn.value = String(Math.round(e.dir));
+    showExif();
+  }
+  saveBtn.addEventListener("click", async function(){
+    err.textContent = ""; tagsC.flush(); rolesC.flush();
+    if(mode2 === "new" && !form.blobFull){ err.textContent = "Välj en bild först."; return; }
+    var pos = parseCoords(posIn.value); if(posIn.value.trim() && !pos){ err.textContent = "Positionen ska skrivas som lat, lon, till exempel 59.32081, 18.06998."; posIn.focus(); return; }
+    var dir = dirIn.value === "" ? null : Number(dirIn.value); if(dir !== null && !(dir >= 0 && dir < 360)){ err.textContent = "Bildriktningen ska vara 0 till 359 grader."; dirIn.focus(); return; }
+    var body = {title:titleIn.value.trim().slice(0,140), note:noteIn.value.trim().slice(0,2000), tags:tagsC.items.slice(0,40), roles:rolesC.items.slice(0,40), lat:pos ? pos.lat : null, lon:pos ? pos.lon : null, dir:dir, updated_at:new Date().toISOString()};
+    saveBtn.disabled = true; saveBtn.textContent = "Sparar…";
+    try{
+      if(mode2 === "new"){
+        var base = myId + "/" + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+        var u1 = await sb.storage.from(BUCKET).upload(base + "-full.jpg", form.blobFull, {contentType:"image/jpeg", upsert:false}); if(u1.error) throw u1.error;
+        var u2 = await sb.storage.from(BUCKET).upload(base + "-thumb.jpg", form.blobThumb, {contentType:"image/jpeg", upsert:false}); if(u2.error) throw u2.error;
+        var e = form.exif || {};
+        Object.assign(body, {full_path:base + "-full.jpg", thumb_path:base + "-thumb.jpg", w:form.w, h:form.h, taken:e.taken || null, tz:typeof e.tz === "number" ? e.tz : null, acc:e.acc || null, camera:e.camera || null, f35:e.f35 || null});
+        var ins = await sb.from("photos").insert(body).select().single(); if(ins.error) throw ins.error;
+        photos.unshift(ins.data); await signUrls([ins.data.thumb_path]);
+        closeForm(true); location.hash = "bild-" + ins.data.id;
+      } else {
+        var up = await sb.from("photos").update(body).eq("id", form.id).select().single(); if(up.error) throw up.error;
+        photos = photos.map(function(x){ return x.id === up.data.id ? up.data : x; });
+        var id = form.id; closeForm(true); location.hash = "bild-" + id; route();
+      }
+    }catch(ex){
+      saveBtn.disabled = false; saveBtn.textContent = mode2 === "new" ? "Spara bakgrund" : "Spara ändringar";
+      err.textContent = "Det gick inte att spara: " + ((ex && ex.message) || "okänt fel") + ". Kontrollera uppkopplingen och försök igen.";
+    }
+  });
+}
+function closeForm(keepHash){ form = null; $("formView").innerHTML = ""; $("topActions").hidden = false; if(!keepHash) route(); }
+
+/* ===== medlemmar (admin) ===== */
+async function openMembers(){
+  if(location.hash) history.replaceState(null, "", location.pathname + location.search);
+  showOnly("membersView"); $("topActions").hidden = true;
+  var v = $("membersView"); v.innerHTML = "";
+  var list = el("div", {class:"mlist"}), err = el("div", {class:"err", role:"alert"});
+  var emailIn = el("input", {type:"email", id:"mEmail", placeholder:"kollega@tv4.se", autocomplete:"off"});
+  async function load(){
+    var r = await sb.from("members").select("*").order("email"); list.innerHTML = "";
+    if(r.error){ err.textContent = r.error.message; return; }
+    r.data.forEach(function(m){
+      var adm = el("button", {type:"button", class:"ghost", text:m.is_admin ? "Admin ✓" : "Gör till admin", onclick:async function(){ var u = await sb.from("members").update({is_admin:!m.is_admin}).eq("email", m.email); if(u.error) err.textContent = u.error.message; load(); }});
+      var del = el("button", {type:"button", class:"ghost danger", text:"Ta bort"});
+      del.addEventListener("click", async function(){ if(m.email.toLowerCase() === myEmail.toLowerCase()){ err.textContent = "Du kan inte ta bort dig själv."; return; } if(del.dataset.armed !== "1"){ del.dataset.armed = "1"; del.textContent = "Bekräfta"; return; } var d = await sb.from("members").delete().eq("email", m.email); if(d.error) err.textContent = d.error.message; load(); });
+      list.appendChild(el("div", {class:"mrow"}, [el("span", {class:"e", text:m.email}), adm, del]));
+    });
+  }
+  var addBtn = el("button", {type:"button", class:"primary", text:"Lägg till", onclick:async function(){
+    err.textContent = ""; var e = emailIn.value.trim().toLowerCase();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){ err.textContent = "Skriv en giltig e-postadress."; return; }
+    var r = await sb.from("members").insert({email:e}); if(r.error){ err.textContent = r.error.code === "23505" ? "Adressen finns redan." : r.error.message; return; }
+    emailIn.value = ""; load(); }});
+  v.appendChild(el("div", {class:"panel"}, [
+    el("div", {class:"actions", style:"justify-content:space-between"}, [el("h2", {text:"Medlemmar"}), el("button", {type:"button", class:"ghost", text:"Klar", onclick:function(){ $("topActions").hidden = false; route(); }})]),
+    el("p", {class:"small", style:"margin:0", text:"Lägg till kollegans e-postadress. Kollegan öppnar sedan appen, väljer Skapa konto med samma adress och ett eget lösenord. Admin kan ta bort alla bilder och hantera medlemmar."}),
+    el("div", {class:"row actions"}, [el("div", {style:"flex:1 1 220px;min-width:0"}, [emailIn]), addBtn]), err, list]));
+  load();
+}
+
+/* ===== inloggning ===== */
+function renderAuth(msg){
+  showOnly("authView"); $("topActions").hidden = true;
+  var v = $("authView"); v.innerHTML = "";
+  var signup = false;
+  var emailIn = el("input", {type:"email", id:"aEmail", autocomplete:"email", placeholder:"namn@tv4.se"});
+  var passIn = el("input", {type:"password", id:"aPass", autocomplete:"current-password", placeholder:"Lösenord"});
+  var err = el("div", {class:"err", role:"alert", text:msg || ""});
+  var title = el("h2", {text:"Logga in"});
+  var go = el("button", {type:"submit", class:"primary", text:"Logga in"});
+  var toggle = el("button", {type:"button", class:"ghost", text:"Skapa konto i stället"});
+  var hint = el("p", {class:"small", style:"margin:0", text:"Bara inbjudna e-postadresser kommer åt bilderna."});
+  toggle.addEventListener("click", function(){ signup = !signup; title.textContent = signup ? "Skapa konto" : "Logga in"; go.textContent = signup ? "Skapa konto" : "Logga in"; toggle.textContent = signup ? "Jag har redan ett konto" : "Skapa konto i stället"; passIn.setAttribute("autocomplete", signup ? "new-password" : "current-password"); passIn.placeholder = signup ? "Välj lösenord, minst 8 tecken" : "Lösenord"; });
+  var f = el("form", {class:"panel auth"}, [title, hint, el("div", {class:"field"}, [el("label", {for:"aEmail", text:"E-post"}), emailIn]), el("div", {class:"field"}, [el("label", {for:"aPass", text:"Lösenord"}), passIn]), err, el("div", {class:"actions"}, [go, toggle])]);
+  f.addEventListener("submit", async function(ev){
+    ev.preventDefault(); err.textContent = "";
+    var e = emailIn.value.trim(), pw = passIn.value;
+    if(!e || !pw){ err.textContent = "Fyll i e-post och lösenord."; return; }
+    if(signup && pw.length < 8){ err.textContent = "Lösenordet måste vara minst 8 tecken."; return; }
+    go.disabled = true;
+    var r = signup ? await sb.auth.signUp({email:e, password:pw}) : await sb.auth.signInWithPassword({email:e, password:pw});
+    go.disabled = false;
+    if(r.error){ err.textContent = /invalid login/i.test(r.error.message) ? "Fel e-post eller lösenord." : /already registered/i.test(r.error.message) ? "Kontot finns redan. Logga in i stället." : r.error.message; return; }
+    if(signup && !r.data.session){ err.textContent = "Kontot är skapat men kräver bekräftelse via e-post. Be Anders stänga av e-postbekräftelse i Supabase."; }
+  });
+  v.appendChild(f);
+}
+async function afterLogin(){
+  myEmail = (session.user && session.user.email) || ""; myId = session.user && session.user.id;
+  var r = await sb.from("members").select("email,is_admin").eq("email", myEmail.toLowerCase()).maybeSingle();
+  if(r.error || !r.data){
+    showOnly("authView"); $("topActions").hidden = true; var v = $("authView"); v.innerHTML = "";
+    v.appendChild(el("div", {class:"panel auth"}, [el("h2", {text:"Inte inbjuden än"}), el("p", {style:"margin:0", text:"Kontot " + myEmail + " finns inte på medlemslistan. Be den som administrerar Bakgrundsbanken lägga till adressen, och ladda sedan om sidan."}), el("div", {class:"actions"}, [el("button", {type:"button", text:"Ladda om", onclick:function(){ location.reload(); }}), el("button", {type:"button", class:"ghost", text:"Logga ut", onclick:function(){ sb.auth.signOut(); }})])]));
+    return;
+  }
+  isAdmin = !!r.data.is_admin; $("membersBtn").hidden = !isAdmin; $("topActions").hidden = false;
+  $("countLine").textContent = "Laddar bakgrunder…"; showOnly("listView");
+  await loadPhotos();
+}
+
+/* ===== routing ===== */
+function route(){
+  if(form || !session) return;
+  var m = /^#bild-([A-Za-z0-9-]+)$/.exec(location.hash);
+  if(m){ showOnly("detailView"); renderDetail(m[1]); window.scrollTo(0,0); }
+  else { showOnly("listView"); detailState = null; renderList(); }
+}
+window.addEventListener("hashchange", function(){ if(!$("membersView").hidden) return; route(); });
+$("q").addEventListener("input", function(){ filt.q = this.value.trim().toLowerCase(); fitted = false; renderList(); });
+$("clearBtn").addEventListener("click", clearFilters);
+$("addBtn").addEventListener("click", function(){ openForm("new"); });
+$("membersBtn").addEventListener("click", openMembers);
+$("logoutBtn").addEventListener("click", function(){ sb.auth.signOut(); });
+$("modeMap").addEventListener("click", function(){ mode = "map"; try{ localStorage.setItem("bb_mode", mode); }catch(_e){} renderList(); });
+$("modeGrid").addEventListener("click", function(){ mode = "grid"; try{ localStorage.setItem("bb_mode", mode); }catch(_e){} renderList(); });
+
+/* ===== start ===== */
+if(SUPABASE_URL.indexOf("__") === 0 || !window.supabase){ $("gate").hidden = false; $("gate").textContent = window.supabase ? "Appen är inte kopplad till någon databas än." : "Kunde inte ladda inloggningen. Kontrollera uppkopplingen och ladda om."; return; }
+sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:true, autoRefreshToken:true}});
+sb.auth.onAuthStateChange(function(evt, s){
+  var had = !!session; session = s;
+  if(!s){ photos = []; renderAuth(); return; }
+  if(evt === "SIGNED_IN" && had) return;
+  if(evt === "TOKEN_REFRESHED" || evt === "USER_UPDATED") return;
+  afterLogin();
+});
+})();
+</script>
+</body>
+</html>
