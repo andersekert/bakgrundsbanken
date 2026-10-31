@@ -545,13 +545,15 @@ function openForm(mode2, p){
   var tagsC = chipInput("Ämnen och plats", d.tags || [], vocab("tags"), false);
   var posIn = el("input", {type:"text", id:"fPos", class:"mono", inputmode:"decimal", value:hasPos(d) ? fmtCoord(d.lat, d.lon) : "", placeholder:"59.32081, 18.06998"});
   var dirIn = el("input", {type:"number", id:"fDir", min:"0", max:"359", step:"1", inputmode:"numeric", value:hasDir(d) ? String(Math.round(d.dir)) : "", placeholder:"232"});
+  var dirNote = el("span", {class:"small", text:"0 = norr, 90 = öster, 180 = söder, 270 = väster."});
+  var compassBtn = el("button", {type:"button", text:"Använd kompassen", style:"align-self:flex-start", onclick:function(){ useCompass(); }});
   rightCol.appendChild(el("div", {class:"field"}, [el("label", {for:"fTitle", text:"Plats"}), titleIn]));
   rightCol.appendChild(rolesC.el); rightCol.appendChild(tagsC.el);
   var aiNote = el("div", {class:"small"}); rightCol.appendChild(aiNote);
   rightCol.appendChild(el("div", {class:"field"}, [el("label", {for:"fNote", text:"Anteckning"}), noteIn]));
   rightCol.appendChild(el("div", {class:"two"}, [
     el("div", {class:"field"}, [el("label", {for:"fPos", text:"Position (lat, lon)"}), posIn, el("span", {class:"small", text:"Klistra in från Google Maps om bilden saknar GPS."})]),
-    el("div", {class:"field"}, [el("label", {for:"fDir", text:"Bildriktning (°)"}), dirIn, el("span", {class:"small", text:"0 = norr, 90 = öster, 180 = söder, 270 = väster."})])]));
+    el("div", {class:"field"}, [el("label", {for:"fDir", text:"Bildriktning (°)"}), dirIn, compassBtn, dirNote])]));
   var err = el("div", {class:"err", role:"alert"});
   var saveBtn = el("button", {type:"button", class:"primary", text:mode2 === "new" ? "Spara bakgrund" : "Spara ändringar"});
   rightCol.appendChild(err); rightCol.appendChild(el("div", {class:"actions"}, [saveBtn, el("button", {type:"button", class:"ghost", text:"Avbryt", onclick:closeForm})]));
@@ -561,11 +563,39 @@ function openForm(mode2, p){
   function showExif(){
     exifBox.innerHTML = ""; var e = form.exif || {};
     function r(k, val){ exifBox.appendChild(el("dt", {text:k})); exifBox.appendChild(el("dd", {text:val})); }
-    r("Tid", e.taken ? fmtTaken({taken:e.taken}) : "saknas i bilden");
-    r("Position", typeof e.lat === "number" ? fmtCoord(e.lat, e.lon) + (e.acc ? " ±" + Math.round(e.acc) + " m" : "") : "saknas i bilden");
+    r("Tid", e.taken ? fmtTaken({taken:e.taken}) + (e.timeSrc ? " (" + e.timeSrc + ")" : "") : "saknas i bilden");
+    r("Position", typeof e.lat === "number" ? fmtCoord(e.lat, e.lon) + (e.acc ? " ±" + Math.round(e.acc) + " m" : "") + (e.posSrc ? " (" + e.posSrc + ")" : "") : "saknas i bilden");
     r("Riktning", typeof e.dir === "number" ? Math.round(e.dir) + "° (" + compass16(e.dir) + ")" : "saknas i bilden");
     if(e.camera) r("Kamera", e.camera + (e.f35 ? ", " + e.f35 + " mm" : ""));
     status.textContent = typeof e.lat === "number" ? "" : "Bilden saknar GPS. Fyll i position för karta, solkompass och väder.";
+    if(typeof e.dir !== "number" && !dirIn.value) dirNote.textContent = "Bilden saknar riktning. Rikta telefonen som när du fotade och tryck Använd kompassen.";
+  }
+  function geolocate(e){
+    return new Promise(function(res){
+      if(!navigator.geolocation){ res(); return; }
+      status.innerHTML = ""; status.appendChild(el("span", {class:"spin"})); status.appendChild(document.createTextNode("Bilden saknar GPS. Hämtar telefonens position…"));
+      navigator.geolocation.getCurrentPosition(function(pos){
+        e.lat = pos.coords.latitude; e.lon = pos.coords.longitude; e.acc = pos.coords.accuracy; e.posSrc = "från telefonen nu";
+        if(!posIn.value) posIn.value = fmtCoord(e.lat, e.lon); res();
+      }, function(){ res(); }, {enableHighAccuracy:true, timeout:15000, maximumAge:60000});
+    });
+  }
+  function useCompass(){
+    dirNote.textContent = "Läser kompassen…";
+    var start = function(){
+      var last = null, n = 0;
+      function h(ev){ var hd = typeof ev.webkitCompassHeading === "number" ? ev.webkitCompassHeading : (ev.absolute && typeof ev.alpha === "number" ? (360 - ev.alpha) % 360 : null); if(hd === null || isNaN(hd)) return; last = hd; n++; dirIn.value = String(Math.round(hd)); dirNote.textContent = "Kompass: " + Math.round(hd) + "° (" + compass16(hd) + ")…"; }
+      window.addEventListener("deviceorientationabsolute", h); window.addEventListener("deviceorientation", h);
+      setTimeout(function(){ window.removeEventListener("deviceorientationabsolute", h); window.removeEventListener("deviceorientation", h);
+        if(last === null){ dirNote.textContent = "Kompassen svarade inte. Skriv riktningen själv."; return; }
+        dirIn.value = String(Math.round(last)); if(form && form.exif){ form.exif.dir = last; form.exif.dirSrc = "kompass"; }
+        dirNote.textContent = "Riktning från kompassen: " + Math.round(last) + "° (" + compass16(last) + "). Kan avvika några grader."; }, 2500);
+    };
+    try{
+      if(typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function"){
+        DeviceOrientationEvent.requestPermission().then(function(st){ if(st === "granted") start(); else dirNote.textContent = "Du tillät inte kompassen. Ändra i Safari-inställningarna eller skriv riktningen själv."; }).catch(function(){ dirNote.textContent = "Kompassen gick inte att starta."; });
+      } else start();
+    }catch(_e){ dirNote.textContent = "Kompassen gick inte att starta."; }
   }
   async function onFile(file){
     err.textContent = ""; preview.innerHTML = ""; exifBox.innerHTML = ""; form.blobFull = null;
@@ -581,6 +611,7 @@ function openForm(mode2, p){
         var off = /^([+-])(\d{2}):(\d{2})$/.exec(String(x.OffsetTimeOriginal || x.OffsetTime || "")); if(off) e.tz = (off[1] === "-" ? -1 : 1) * ((+off[2])*60 + (+off[3]));
         if(x.Model) e.camera = String(x.Model); if(typeof x.FocalLengthIn35mmFormat === "number") e.f35 = x.FocalLengthIn35mmFormat; }
     }catch(_e){}
+    if(!e.taken && file.lastModified && Math.abs(Date.now() - file.lastModified) < 30*60000){ var nd = new Date(file.lastModified); e.taken = nd.getFullYear() + "-" + pad(nd.getMonth()+1) + "-" + pad(nd.getDate()) + "T" + pad(nd.getHours()) + ":" + pad(nd.getMinutes()) + ":" + pad(nd.getSeconds()); e.tz = -nd.getTimezoneOffset(); e.timeSrc = "telefonens klocka"; }
     form.exif = e;
     var bmp = null;
     try{ bmp = await createImageBitmap(file, {imageOrientation:"from-image"}); }
@@ -593,6 +624,7 @@ function openForm(mode2, p){
     preview.appendChild(el("img", {src:URL.createObjectURL(thumb.blob), alt:"Förhandsvisning"}));
     if(typeof e.lat === "number" && !posIn.value) posIn.value = fmtCoord(e.lat, e.lon);
     if(typeof e.dir === "number" && !dirIn.value) dirIn.value = String(Math.round(e.dir));
+    if(typeof e.lat !== "number") await geolocate(e);
     showExif();
     suggest(ai.blob, e);
   }
