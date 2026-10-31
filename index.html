@@ -519,6 +519,7 @@ function chipInput(label, items, vocabList, isRole){
   input.addEventListener("change", function(){ if(vocabList.some(function(v){ return v[0] === norm(input.value); })) commit(); });
   wrap.appendChild(el("span", {class:"lab", text:label})); wrap.appendChild(chips); wrap.appendChild(el("div", {class:"row"}, [input, el("button", {type:"button", text:"Lägg till", onclick:commit})])); wrap.appendChild(dl);
   draw(); state.el = wrap; state.flush = commit;
+  state.addMany = function(arr){ uniq(arr).forEach(function(t){ if(state.items.indexOf(t) < 0) state.items.push(t); }); draw(); };
   return state;
 }
 function parseCoords(s){ s = String(s || "").trim(); if(!s) return null; var m = /(-?\d{1,2}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)/.exec(s.replace(/@/g," ")); if(!m) return null; var la = parseFloat(m[1]), lo = parseFloat(m[2]); if(Math.abs(la) > 90 || Math.abs(lo) > 180) return null; return {lat:la, lon:lo}; }
@@ -548,6 +549,7 @@ function openForm(mode2, p){
   var dirIn = el("input", {type:"number", id:"fDir", min:"0", max:"359", step:"1", inputmode:"numeric", value:hasDir(d) ? String(Math.round(d.dir)) : "", placeholder:"232"});
   rightCol.appendChild(el("div", {class:"field"}, [el("label", {for:"fTitle", text:"Plats"}), titleIn]));
   rightCol.appendChild(rolesC.el); rightCol.appendChild(tagsC.el);
+  var aiNote = el("div", {class:"small"}); rightCol.appendChild(aiNote);
   rightCol.appendChild(el("div", {class:"field"}, [el("label", {for:"fNote", text:"Anteckning"}), noteIn]));
   rightCol.appendChild(el("div", {class:"two"}, [
     el("div", {class:"field"}, [el("label", {for:"fPos", text:"Position (lat, lon)"}), posIn, el("span", {class:"small", text:"Klistra in från Google Maps om bilden saknar GPS."})]),
@@ -588,12 +590,47 @@ function openForm(mode2, p){
     if(!bmp){ status.textContent = ""; err.textContent = "Bildformatet gick inte att läsa (troligen HEIC). Välj JPEG, eller ställ in iPhone på Kamera › Format › Mest kompatibel."; return; }
     var W = bmp.width || bmp.naturalWidth, H = bmp.height || bmp.naturalHeight;
     function scaled(max, q){ var s = Math.min(1, max / Math.max(W, H)); var c = document.createElement("canvas"); c.width = Math.round(W*s); c.height = Math.round(H*s); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); return new Promise(function(res){ c.toBlob(function(b){ res({blob:b, w:c.width, h:c.height}); }, "image/jpeg", q); }); }
-    var full = await scaled(2560, 0.86), thumb = await scaled(720, 0.8);
+    var full = await scaled(2560, 0.86), thumb = await scaled(720, 0.8), ai = await scaled(1280, 0.82);
     form.blobFull = full.blob; form.blobThumb = thumb.blob; form.w = full.w; form.h = full.h;
     preview.appendChild(el("img", {src:URL.createObjectURL(thumb.blob), alt:"Förhandsvisning"}));
     if(typeof e.lat === "number" && !posIn.value) posIn.value = fmtCoord(e.lat, e.lon);
     if(typeof e.dir === "number" && !dirIn.value) dirIn.value = String(Math.round(e.dir));
     showExif();
+    suggest(ai.blob, e);
+  }
+  async function suggest(blob, e){
+    aiNote.innerHTML = ""; aiNote.appendChild(el("span", {class:"status"}, [el("span", {class:"spin"}), "Claude föreslår plats, ämnen och yrken…"]));
+    var vt = vocab("tags").slice(0, 60).map(function(x){ return x[0]; }), vr = vocab("roles").slice(0, 60).map(function(x){ return x[0]; });
+    var prompt = "Du hjälper en nyhetsfotograf att katalogisera bakgrunder för intervjuer. Bilden visar en möjlig intervjubakgrund.\n" +
+      (typeof e.lat === "number" ? "Position: " + e.lat.toFixed(5) + ", " + e.lon.toFixed(5) + ".\n" : "Position okänd.\n") +
+      (e.taken ? "Tagen: " + e.taken + ".\n" : "") + (typeof e.dir === "number" ? "Kamerans riktning: " + Math.round(e.dir) + " grader.\n" : "") +
+      "Befintliga ämnestaggar i banken: " + (vt.join(", ") || "inga") + ".\nBefintliga yrken i banken: " + (vr.join(", ") || "inga") + ".\n" +
+      "Föreslå på svenska:\n- plats: kort platsnamn om du är säker på var det är, annars en kort beskrivning av miljön. Gissa inte namn på byggnader du inte är säker på.\n" +
+      "- beskrivning: en mening om vad som syns i bakgrunden.\n- amnen: 6 till 10 korta taggar om ämne, plats, miljö och tid på dygnet, i gemener. Återanvänd befintliga taggar när de passar.\n" +
+      "- yrken: 5 till 10 yrken eller roller som skulle passa att intervjua framför bakgrunden, i gemener, i singular. Återanvänd befintliga när de passar.\n" +
+      "Svara bara med JSON: {\"plats\":\"...\",\"beskrivning\":\"...\",\"amnen\":[\"...\"],\"yrken\":[\"...\"]}";
+    try{
+      var b64 = await new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(String(fr.result).split(",")[1]); }; fr.onerror = rej; fr.readAsDataURL(blob); });
+      var r = await sb.functions.invoke("tagga", {body:{image:b64, prompt:prompt}});
+      if(!form || !aiNote.isConnected) return;
+      var code = null;
+      if(r.error){ try{ var eb = r.error.context && typeof r.error.context.json === "function" ? await r.error.context.json() : null; code = eb && eb.error; }catch(_x){} throw {code:code || "fel"}; }
+      var t = String((r.data && r.data.text) || ""), a = t.indexOf("{"), b = t.lastIndexOf("}");
+      var o = a >= 0 && b > a ? JSON.parse(t.slice(a, b+1)) : null;
+      if(!o) throw {code:"svar"};
+      if(o.plats && !titleIn.value) titleIn.value = String(o.plats).slice(0, 120);
+      if(o.beskrivning && !noteIn.value) noteIn.value = String(o.beskrivning).slice(0, 600);
+      if(Array.isArray(o.amnen)) tagsC.addMany(o.amnen.slice(0, 12).map(String));
+      if(Array.isArray(o.yrken)) rolesC.addMany(o.yrken.slice(0, 12).map(String));
+      aiNote.textContent = "Förslag från Claude. Ta bort det som inte passar och lägg till egna.";
+    }catch(ex){
+      if(!aiNote.isConnected) return;
+      var c = ex && ex.code;
+      aiNote.textContent = c === "no_key" ? "Claude-förslag är inte inkopplade än (API-nyckel saknas). Skriv taggar själv." :
+        c === "not_member" ? "Claude-förslag kräver att du är medlem." :
+        c === "api" ? "Claude svarade inte just nu (kontrollera saldo på API-kontot). Skriv taggar själv." :
+        "Claude kunde inte föreslå något den här gången. Skriv taggar och yrken själv.";
+    }
   }
   saveBtn.addEventListener("click", async function(){
     err.textContent = ""; tagsC.flush(); rolesC.flush();
